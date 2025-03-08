@@ -1,0 +1,60 @@
+name: Generate License Key
+on:
+  issues:
+    types: [opened, edited]
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+      - name: Check for Command
+        id: check-command
+        run: |
+          ISSUE_BODY="${{ github.event.issue.body }}"
+          if [[ "$ISSUE_BODY" =~ "/generate-license" ]]; then
+            echo "generate=true" >> $GITHUB_ENV
+          else
+            echo "generate=false" >> $GITHUB_ENV
+          fi
+      - name: Generate License Key
+        if: env.generate == 'true'
+        run: |
+          # Gera uma chave única usando uuidgen
+          KEY=$(uuidgen | tr '[:lower:]' '[:upper:]')
+          echo "Generated License Key: $KEY" >> $GITHUB_STEP_SUMMARY
+          echo "KEY=$KEY" >> $GITHUB_ENV
+      - name: Append Key to licenses.txt
+        if: env.generate == 'true'
+        run: |
+          echo "${{ env.KEY }}" >> licenses.txt
+      - name: Commit Changes
+        if: env.generate == 'true'
+        run: |
+          git config --global user.name "LicenseBot"
+          git config --global user.email "bot@noreply.github.com"
+          git add licenses.txt
+          git commit -m "Add new license key: ${{ env.KEY }}"
+          git push
+      - name: Comment on Issue
+        if: env.generate == 'true'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `Nova chave de licença gerada: **${{ env.KEY }}**`
+            })
+      - name: Comment if Command Not Found
+        if: env.generate == 'false'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: 'Comando não reconhecido. Use `/generate-license` para gerar uma chave.'
+            })
